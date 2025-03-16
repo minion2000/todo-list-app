@@ -30,6 +30,9 @@ import {
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
+import { TodoItem, priorities } from "../types";
+import { DragOverlay } from "./DragOverlay";
+import { animations } from "../animations";
 
 interface TodoItem {
   id: string;
@@ -41,99 +44,28 @@ interface TodoItem {
 }
 
 const defaultCategories = ["すべて", "仕事", "個人", "買い物", "その他"];
-const priorities = [
-  {
-    value: "low",
-    label: "低",
-    color: "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200",
-  },
-  {
-    value: "medium",
-    label: "中",
-    color:
-      "bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200",
-  },
-  {
-    value: "high",
-    label: "高",
-    color: "bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200",
-  },
-];
-
-// アニメーションの設定
-const animations = {
-  fadeIn: {
-    initial: { opacity: 0 },
-    animate: { opacity: 1 },
-    exit: { opacity: 0 },
-    transition: { duration: 0.2 },
-  },
-  slideIn: {
-    initial: { opacity: 0, y: 20 },
-    animate: { opacity: 1, y: 0 },
-    exit: { opacity: 0, x: -100 },
-    transition: { duration: 0.3, ease: "easeOut" },
-  },
-  complete: {
-    initial: { backgroundColor: "transparent" },
-    animate: {
-      backgroundColor: ["transparent", "rgba(34, 197, 94, 0.2)", "transparent"],
-      transition: { duration: 0.5 },
-    },
-  },
-  delete: {
-    initial: { opacity: 1, x: 0 },
-    exit: {
-      opacity: 0,
-      x: -100,
-      transition: {
-        duration: 0.3,
-        ease: "easeInOut",
-      },
-    },
-  },
-  drag: {
-    initial: {
-      scale: 1,
-      boxShadow: "0 0 0 rgba(0, 0, 0, 0)",
-      transition: { duration: 0.2 },
-    },
-    active: {
-      scale: 1.02,
-      boxShadow: "0 8px 20px rgba(0, 0, 0, 0.12)",
-      cursor: "grabbing",
-      zIndex: 999,
-      transition: {
-        duration: 0.2,
-        ease: "easeInOut",
-      },
-    },
-  },
-};
-
-function DragOverlay() {
-  return (
-    <motion.div
-      className="absolute inset-0 border-2 border-purple-500 border-dashed rounded-lg pointer-events-none"
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      exit={{ opacity: 0 }}
-      transition={{ duration: 0.2 }}
-    />
-  );
-}
 
 function SortableTodoItem({
   todo,
   onToggle,
   onDelete,
+  onEdit,
   isDragOverlay = false,
 }: {
   todo: TodoItem;
   onToggle: () => void;
   onDelete: () => void;
+  onEdit: (updatedTodo: TodoItem) => void;
   isDragOverlay?: boolean;
 }) {
+  const [isEditing, setIsEditing] = useState(false);
+  const [editedText, setEditedText] = useState(todo.text);
+  const [editedCategory, setEditedCategory] = useState(todo.category);
+  const [editedPriority, setEditedPriority] = useState(todo.priority);
+  const [editedDueDate, setEditedDueDate] = useState(
+    todo.dueDate ? format(todo.dueDate, "yyyy-MM-dd") : ""
+  );
+
   const {
     attributes,
     listeners,
@@ -158,9 +90,26 @@ function SortableTodoItem({
   const priorityColor = priorities.find(
     (p) => p.value === todo.priority
   )?.color;
-
-  // ドラッグハンドル部分のみにドラッグ機能を適用
   const dragHandleClass = "flex-1 cursor-grab active:cursor-grabbing";
+
+  const handleSave = () => {
+    onEdit({
+      ...todo,
+      text: editedText,
+      category: editedCategory,
+      priority: editedPriority,
+      dueDate: editedDueDate ? new Date(editedDueDate) : todo.dueDate,
+    });
+    setIsEditing(false);
+  };
+
+  const handleCancel = () => {
+    setEditedText(todo.text);
+    setEditedCategory(todo.category);
+    setEditedPriority(todo.priority);
+    setEditedDueDate(todo.dueDate ? format(todo.dueDate, "yyyy-MM-dd") : "");
+    setIsEditing(false);
+  };
 
   return (
     <motion.div
@@ -181,7 +130,6 @@ function SortableTodoItem({
     >
       {isDragging && <DragOverlay />}
 
-      {/* 完了ボタン - ドラッグ対象外 */}
       <motion.button
         onClick={onToggle}
         whileTap={{ scale: 0.9 }}
@@ -195,49 +143,111 @@ function SortableTodoItem({
         <CheckCircleIcon className="h-6 w-6" />
       </motion.button>
 
-      {/* ドラッグ可能な中央部分 */}
-      <div className={dragHandleClass} {...attributes} {...listeners}>
-        <div className="flex flex-col">
-          <span
-            className={clsx(
-              "text-lg",
-              todo.completed
-                ? "text-gray-500 line-through dark:text-gray-400"
-                : "text-gray-700 dark:text-gray-200"
-            )}
-          >
-            {todo.text}
-          </span>
-          <div className="flex gap-2 items-center mt-1 flex-wrap">
-            <span
-              className={clsx(
-                "px-2 py-1 rounded-full text-xs font-medium",
-                priorityColor
-              )}
+      {isEditing ? (
+        <div className="flex-1 space-y-3">
+          <input
+            type="text"
+            value={editedText}
+            onChange={(e) => setEditedText(e.target.value)}
+            className="w-full px-3 py-2 border rounded-lg dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+            placeholder="タスクを入力"
+          />
+          <div className="flex gap-3 flex-wrap">
+            <input
+              type="text"
+              value={editedCategory}
+              onChange={(e) => setEditedCategory(e.target.value)}
+              className="px-3 py-2 border rounded-lg dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+              placeholder="カテゴリー"
+            />
+            <select
+              value={editedPriority}
+              onChange={(e) => setEditedPriority(e.target.value)}
+              className="px-3 py-2 border rounded-lg dark:bg-gray-700 dark:border-gray-600 dark:text-white"
             >
-              {priorities.find((p) => p.value === todo.priority)?.label}
-            </span>
-            <span className="text-sm text-gray-500 dark:text-gray-400">
-              {todo.category}
-            </span>
-            {todo.dueDate && (
-              <span className="text-sm text-gray-500 dark:text-gray-400">
-                期限: {format(todo.dueDate, "yyyy/MM/dd", { locale: ja })}
-              </span>
-            )}
+              {priorities.map((priority) => (
+                <option key={priority.value} value={priority.value}>
+                  {priority.label}
+                </option>
+              ))}
+            </select>
+            <input
+              type="date"
+              value={editedDueDate}
+              onChange={(e) => setEditedDueDate(e.target.value)}
+              className="px-3 py-2 border rounded-lg dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+            />
+          </div>
+          <div className="flex gap-2">
+            <button
+              onClick={handleSave}
+              className="px-4 py-2 bg-purple-500 text-white rounded-lg hover:bg-purple-600 transition-colors duration-200"
+            >
+              保存
+            </button>
+            <button
+              onClick={handleCancel}
+              className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors duration-200 dark:bg-gray-700 dark:text-gray-200 dark:hover:bg-gray-600"
+            >
+              キャンセル
+            </button>
           </div>
         </div>
-      </div>
+      ) : (
+        <div className={dragHandleClass} {...attributes} {...listeners}>
+          <div className="flex flex-col">
+            <span
+              className={clsx(
+                "text-lg",
+                todo.completed
+                  ? "text-gray-500 line-through dark:text-gray-400"
+                  : "text-gray-700 dark:text-gray-200"
+              )}
+            >
+              {todo.text}
+            </span>
+            <div className="flex gap-2 items-center mt-1 flex-wrap">
+              <span
+                className={clsx(
+                  "px-2 py-1 rounded-full text-xs font-medium",
+                  priorityColor
+                )}
+              >
+                {priorities.find((p) => p.value === todo.priority)?.label}
+              </span>
+              <span className="text-sm text-gray-500 dark:text-gray-400">
+                {todo.category}
+              </span>
+              {todo.dueDate && (
+                <span className="text-sm text-gray-500 dark:text-gray-400">
+                  期限: {format(todo.dueDate, "yyyy/MM/dd", { locale: ja })}
+                </span>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
-      {/* 削除ボタン - ドラッグ対象外 */}
-      <motion.button
-        onClick={onDelete}
-        whileHover={{ scale: 1.1 }}
-        whileTap={{ scale: 0.9 }}
-        className="p-2 text-gray-400 hover:text-red-500 rounded-full hover:bg-red-50 transition-colors duration-200 dark:text-gray-500 dark:hover:text-red-400 dark:hover:bg-red-900/20 shrink-0 ml-3"
-      >
-        <TrashIcon className="h-5 w-5" />
-      </motion.button>
+      <div className="flex items-center gap-2 shrink-0 ml-3">
+        {!isEditing && (
+          <motion.button
+            onClick={() => setIsEditing(true)}
+            whileHover={{ scale: 1.1 }}
+            whileTap={{ scale: 0.9 }}
+            className="p-2 text-gray-400 hover:text-purple-500 rounded-full hover:bg-purple-50 transition-colors duration-200 dark:text-gray-500 dark:hover:text-purple-400 dark:hover:bg-purple-900/20"
+          >
+            <PencilIcon className="h-5 w-5" />
+          </motion.button>
+        )}
+        <motion.button
+          onClick={onDelete}
+          whileHover={{ scale: 1.1 }}
+          whileTap={{ scale: 0.9 }}
+          className="p-2 text-gray-400 hover:text-red-500 rounded-full hover:bg-red-50 transition-colors duration-200 dark:text-gray-500 dark:hover:text-red-400 dark:hover:bg-red-900/20"
+        >
+          <TrashIcon className="h-5 w-5" />
+        </motion.button>
+      </div>
     </motion.div>
   );
 }
@@ -373,6 +383,12 @@ export default function TodoList() {
 
   const deleteTodo = (id: string) => {
     setTodos((prev) => prev.filter((todo) => todo.id !== id));
+  };
+
+  const editTodo = (updatedTodo: TodoItem) => {
+    setTodos((prev) =>
+      prev.map((todo) => (todo.id === updatedTodo.id ? updatedTodo : todo))
+    );
   };
 
   const filteredTodos = todos.filter((todo) =>
@@ -594,6 +610,7 @@ export default function TodoList() {
                         todo={todo}
                         onToggle={() => toggleTodo(todo.id)}
                         onDelete={() => deleteTodo(todo.id)}
+                        onEdit={editTodo}
                       />
                       {dragOverId === todo.id && (
                         <motion.div
