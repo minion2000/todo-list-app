@@ -7,7 +7,7 @@ export interface TodoItem {
   dueDate?: Date;
 }
 
-interface Priority {
+export interface Priority {
   value: "low" | "medium" | "high";
   label: string;
   color: string;

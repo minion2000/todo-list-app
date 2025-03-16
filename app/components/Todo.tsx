@@ -30,7 +30,7 @@ import {
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { TodoItem, priorities } from "../types";
+import { TodoItem, Priority, priorities } from "../types";
 import { DragOverlay } from "./DragOverlay";
 import { animations } from "../animations";
 
@@ -79,7 +79,7 @@ function SortableTodoItem({
   };
 
   const priorityColor = priorities.find(
-    (p) => p.value === todo.priority
+    (p: Priority) => p.value === todo.priority
   )?.color;
   const dragHandleClass = "flex-1 cursor-grab active:cursor-grabbing";
 
@@ -153,10 +153,12 @@ function SortableTodoItem({
             />
             <select
               value={editedPriority}
-              onChange={(e) => setEditedPriority(e.target.value)}
+              onChange={(e) =>
+                setEditedPriority(e.target.value as "low" | "medium" | "high")
+              }
               className="px-3 py-2 border rounded-lg dark:bg-gray-700 dark:border-gray-600 dark:text-white"
             >
-              {priorities.map((priority) => (
+              {priorities.map((priority: Priority) => (
                 <option key={priority.value} value={priority.value}>
                   {priority.label}
                 </option>
@@ -204,7 +206,10 @@ function SortableTodoItem({
                   priorityColor
                 )}
               >
-                {priorities.find((p) => p.value === todo.priority)?.label}
+                {
+                  priorities.find((p: Priority) => p.value === todo.priority)
+                    ?.label
+                }
               </span>
               <span className="text-sm text-gray-500 dark:text-gray-400">
                 {todo.category}
@@ -544,7 +549,7 @@ export default function TodoList() {
                     : "bg-white border-gray-300 text-gray-900"
                 )}
               >
-                {priorities.map((priority) => (
+                {priorities.map((priority: Priority) => (
                   <option key={priority.value} value={priority.value}>
                     優先度: {priority.label}
                   </option>
