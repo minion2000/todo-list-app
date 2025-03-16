@@ -72,57 +72,131 @@ const animations = {
     initial: { opacity: 0, y: 20 },
     animate: { opacity: 1, y: 0 },
     exit: { opacity: 0, x: -100 },
-    transition: { duration: 0.2 },
+    transition: { duration: 0.3, ease: "easeOut" },
+  },
+  complete: {
+    initial: { backgroundColor: "transparent" },
+    animate: {
+      backgroundColor: ["transparent", "rgba(34, 197, 94, 0.2)", "transparent"],
+      transition: { duration: 0.5 },
+    },
+  },
+  delete: {
+    initial: { opacity: 1, x: 0 },
+    exit: {
+      opacity: 0,
+      x: -100,
+      transition: {
+        duration: 0.3,
+        ease: "easeInOut",
+      },
+    },
+  },
+  drag: {
+    initial: {
+      scale: 1,
+      boxShadow: "0 0 0 rgba(0, 0, 0, 0)",
+      transition: { duration: 0.2 },
+    },
+    active: {
+      scale: 1.02,
+      boxShadow: "0 8px 20px rgba(0, 0, 0, 0.12)",
+      cursor: "grabbing",
+      zIndex: 999,
+      transition: {
+        duration: 0.2,
+        ease: "easeInOut",
+      },
+    },
   },
 };
+
+function DragOverlay() {
+  return (
+    <motion.div
+      className="absolute inset-0 border-2 border-purple-500 border-dashed rounded-lg pointer-events-none"
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      transition={{ duration: 0.2 }}
+    />
+  );
+}
 
 function SortableTodoItem({
   todo,
   onToggle,
   onDelete,
+  isDragOverlay = false,
 }: {
   todo: TodoItem;
   onToggle: () => void;
   onDelete: () => void;
+  isDragOverlay?: boolean;
 }) {
-  const { attributes, listeners, setNodeRef, transform, transition } =
-    useSortable({ id: todo.id });
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({
+    id: todo.id,
+    transition: {
+      duration: 200,
+      easing: "ease",
+    },
+  });
 
   const style = {
     transform: CSS.Transform.toString(transform),
     transition,
+    position: "relative" as const,
   };
 
   const priorityColor = priorities.find(
     (p) => p.value === todo.priority
   )?.color;
 
+  // ドラッグハンドル部分のみにドラッグ機能を適用
+  const dragHandleClass = "flex-1 cursor-grab active:cursor-grabbing";
+
   return (
     <motion.div
       ref={setNodeRef}
       style={style}
-      {...attributes}
-      {...listeners}
-      {...animations.slideIn}
+      layout="position"
+      initial={false}
+      animate={isDragging ? animations.drag.active : animations.drag.initial}
+      whileHover={{ scale: 1.01, transition: { duration: 0.2 } }}
       className={clsx(
-        "flex items-center justify-between p-4 mb-4 rounded-lg border transition-colors duration-200",
+        "group flex items-center justify-between p-4 mb-4 rounded-lg border transition-all duration-200 relative",
+        isDragging &&
+          "ring-2 ring-purple-500 ring-opacity-50 shadow-lg backdrop-blur-sm",
         todo.completed
           ? "bg-green-50 border-green-200 dark:bg-green-900/20 dark:border-green-800"
           : "bg-white border-gray-200 hover:border-purple-200 dark:bg-gray-800 dark:border-gray-700 dark:hover:border-purple-700"
       )}
     >
-      <div className="flex items-center space-x-3 flex-1">
-        <button
-          onClick={onToggle}
-          className={clsx(
-            "p-1 rounded-full transition-colors duration-200",
-            todo.completed
-              ? "text-green-500 dark:text-green-400"
-              : "text-gray-400 hover:text-purple-500 dark:text-gray-500 dark:hover:text-purple-400"
-          )}
-        >
-          <CheckCircleIcon className="h-6 w-6" />
-        </button>
+      {isDragging && <DragOverlay />}
+
+      {/* 完了ボタン - ドラッグ対象外 */}
+      <motion.button
+        onClick={onToggle}
+        whileTap={{ scale: 0.9 }}
+        className={clsx(
+          "p-2 rounded-full transition-colors duration-200 mr-3 shrink-0",
+          todo.completed
+            ? "text-green-500 dark:text-green-400"
+            : "text-gray-400 hover:text-purple-500 dark:text-gray-500 dark:hover:text-purple-400"
+        )}
+      >
+        <CheckCircleIcon className="h-6 w-6" />
+      </motion.button>
+
+      {/* ドラッグ可能な中央部分 */}
+      <div className={dragHandleClass} {...attributes} {...listeners}>
         <div className="flex flex-col">
           <span
             className={clsx(
@@ -155,12 +229,15 @@ function SortableTodoItem({
         </div>
       </div>
 
-      <button
+      {/* 削除ボタン - ドラッグ対象外 */}
+      <motion.button
         onClick={onDelete}
-        className="p-2 text-gray-400 hover:text-red-500 rounded-full hover:bg-red-50 transition-colors duration-200 dark:text-gray-500 dark:hover:text-red-400 dark:hover:bg-red-900/20"
+        whileHover={{ scale: 1.1 }}
+        whileTap={{ scale: 0.9 }}
+        className="p-2 text-gray-400 hover:text-red-500 rounded-full hover:bg-red-50 transition-colors duration-200 dark:text-gray-500 dark:hover:text-red-400 dark:hover:bg-red-900/20 shrink-0 ml-3"
       >
         <TrashIcon className="h-5 w-5" />
-      </button>
+      </motion.button>
     </motion.div>
   );
 }
@@ -177,6 +254,7 @@ export default function TodoList() {
   const [categories, setCategories] = useState<string[]>(defaultCategories);
   const [newCategory, setNewCategory] = useState("");
   const [isAddingCategory, setIsAddingCategory] = useState(false);
+  const [dragOverId, setDragOverId] = useState<string | null>(null);
 
   const sensors = useSensors(
     useSensor(PointerSensor),
@@ -258,29 +336,43 @@ export default function TodoList() {
     setDueDate("");
   };
 
+  const handleDragStart = (event: any) => {
+    const { active } = event;
+    setDragOverId(active.id);
+  };
+
+  const handleDragOver = (event: any) => {
+    const { over } = event;
+    setDragOverId(over?.id || null);
+  };
+
+  const handleDragEnd = (event: any) => {
+    const { active, over } = event;
+    setDragOverId(null);
+
+    if (active && over && active.id !== over.id) {
+      setTodos((items) => {
+        const oldIndex = items.findIndex((item) => item.id === active.id);
+        const newIndex = items.findIndex((item) => item.id === over.id);
+
+        if (oldIndex !== -1 && newIndex !== -1) {
+          return arrayMove(items, oldIndex, newIndex);
+        }
+        return items;
+      });
+    }
+  };
+
   const toggleTodo = (id: string) => {
-    setTodos(
-      todos.map((todo) =>
+    setTodos((prev) =>
+      prev.map((todo) =>
         todo.id === id ? { ...todo, completed: !todo.completed } : todo
       )
     );
   };
 
   const deleteTodo = (id: string) => {
-    setTodos(todos.filter((todo) => todo.id !== id));
-  };
-
-  const handleDragEnd = (event: any) => {
-    const { active, over } = event;
-
-    if (active.id !== over.id) {
-      setTodos((items) => {
-        const oldIndex = items.findIndex((item) => item.id === active.id);
-        const newIndex = items.findIndex((item) => item.id === over.id);
-
-        return arrayMove(items, oldIndex, newIndex);
-      });
-    }
+    setTodos((prev) => prev.filter((todo) => todo.id !== id));
   };
 
   const filteredTodos = todos.filter((todo) =>
@@ -469,22 +561,54 @@ export default function TodoList() {
           <DndContext
             sensors={sensors}
             collisionDetection={closestCenter}
+            onDragStart={handleDragStart}
+            onDragOver={handleDragOver}
             onDragEnd={handleDragEnd}
           >
             <SortableContext
               items={filteredTodos.map((todo) => todo.id)}
               strategy={verticalListSortingStrategy}
             >
-              <AnimatePresence>
-                {filteredTodos.map((todo) => (
-                  <SortableTodoItem
-                    key={todo.id}
-                    todo={todo}
-                    onToggle={() => toggleTodo(todo.id)}
-                    onDelete={() => deleteTodo(todo.id)}
-                  />
-                ))}
-              </AnimatePresence>
+              <motion.div layout>
+                <AnimatePresence mode="popLayout" initial={false}>
+                  {filteredTodos.map((todo) => (
+                    <motion.div
+                      key={todo.id}
+                      layout
+                      initial={false}
+                      exit={animations.delete.exit}
+                      animate={
+                        todo.completed
+                          ? {
+                              backgroundColor: [
+                                "transparent",
+                                "rgba(34, 197, 94, 0.2)",
+                                "transparent",
+                              ],
+                              transition: { duration: 0.5 },
+                            }
+                          : undefined
+                      }
+                    >
+                      <SortableTodoItem
+                        todo={todo}
+                        onToggle={() => toggleTodo(todo.id)}
+                        onDelete={() => deleteTodo(todo.id)}
+                      />
+                      {dragOverId === todo.id && (
+                        <motion.div
+                          className="h-1 bg-purple-500 rounded-full mx-4 mb-4"
+                          layoutId="dragIndicator"
+                          initial={{ opacity: 0, scale: 0 }}
+                          animate={{ opacity: 1, scale: 1 }}
+                          exit={{ opacity: 0, scale: 0 }}
+                          transition={{ duration: 0.2 }}
+                        />
+                      )}
+                    </motion.div>
+                  ))}
+                </AnimatePresence>
+              </motion.div>
             </SortableContext>
           </DndContext>
 
