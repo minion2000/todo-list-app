@@ -34,15 +34,6 @@ import { TodoItem, priorities } from "../types";
 import { DragOverlay } from "./DragOverlay";
 import { animations } from "../animations";
 
-interface TodoItem {
-  id: string;
-  text: string;
-  completed: boolean;
-  priority: "low" | "medium" | "high";
-  category: string;
-  dueDate?: Date;
-}
-
 const defaultCategories = ["すべて", "仕事", "個人", "買い物", "その他"];
 
 function SortableTodoItem({
